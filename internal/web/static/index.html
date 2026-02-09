@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ExifScan Control Panel</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        .card { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; border-radius: 4px; }
+        label { display: block; margin-bottom: 0.5rem; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 0.5rem; margin-bottom: 1rem; box-sizing: border-box; }
+        button { padding: 0.5rem 1rem; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        #log { background: #f4f4f4; padding: 1rem; border-radius: 4px; height: 200px; overflow-y: auto; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+
+<h1>ExifScan Control Panel</h1>
+
+<div class="card">
+    <h2>Configuration</h2>
+    <form id="configForm">
+        <label>Server Port</label>
+        <input type="number" id="serverPort" name="server.port">
+
+        <label>Database Driver (mysql/sqlite)</label>
+        <input type="text" id="dbDriver" name="database.driver">
+        
+        <label>Database Source (DSN or File Path)</label>
+        <input type="text" id="dbSource" name="database.source">
+        
+        <label>Database Table</label>
+        <input type="text" id="dbTable" name="database.table">
+
+        <label>Scan Path</label>
+        <input type="text" id="scanPath" name="scan.path">
+
+        <label>Excel Output File</label>
+        <input type="text" id="excelOutput" name="excel.output">
+
+        <button type="submit">Update Config</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Operations</h2>
+    <button id="scanBtn">Start Scan</button>
+</div>
+
+<div class="card">
+    <h2>Log</h2>
+    <div id="log"></div>
+</div>
+
+<script>
+    const logDiv = document.getElementById('log');
+    function log(msg) {
+        logDiv.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // Load Config
+    fetch('/api/config')
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('serverPort').value = data.server.port;
+            document.getElementById('dbDriver').value = data.database.driver;
+            document.getElementById('dbSource').value = data.database.source;
+            document.getElementById('dbTable').value = data.database.table;
+            document.getElementById('scanPath').value = data.scan.path;
+            document.getElementById('excelOutput').value = data.excel.output;
+            log('Configuration loaded.');
+        })
+        .catch(err => log('Error loading config: ' + err));
+
+    // Update Config
+    document.getElementById('configForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const config = {
+            server: { port: parseInt(document.getElementById('serverPort').value) },
+            database: {
+                driver: document.getElementById('dbDriver').value,
+                source: document.getElementById('dbSource').value,
+                table: document.getElementById('dbTable').value
+            },
+            scan: {
+                path: document.getElementById('scanPath').value,
+                // extensions not editable in UI for now, kept server-side default or existing
+            },
+            excel: {
+                output: document.getElementById('excelOutput').value
+            }
+        };
+
+        fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        })
+        .then(res => {
+            if (res.ok) log('Configuration updated.');
+            else log('Failed to update configuration.');
+        })
+        .catch(err => log('Error updating config: ' + err));
+    });
+
+    // Start Scan
+    document.getElementById('scanBtn').addEventListener('click', () => {
+        log('Starting scan...');
+        fetch('/api/scan', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    log(`Scan complete. Processed ${data.count} images.`);
+                } else {
+                    log(`Scan failed: ${data.message}`);
+                }
+            })
+            .catch(err => log('Error during scan: ' + err));
+    });
+</script>
+
+</body>
+</html>

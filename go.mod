@@ -5,8 +5,10 @@ go 1.23.1
 require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/jmoiron/sqlx v1.4.0
+	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/xuri/excelize/v2 v2.9.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
