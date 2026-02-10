@@ -16,8 +16,12 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	if err := db.InitDB(); err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+	if config.AppConfig.Database.Enabled {
+		if err := db.InitDB(); err != nil {
+			log.Fatalf("Failed to initialize database: %v", err)
+		}
+	} else {
+		log.Println("Database disabled in config.")
 	}
 
 	web.StartServer()

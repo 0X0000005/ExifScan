@@ -1,125 +1,183 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ExifScan Control Panel</title>
-    <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
-        .card { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; border-radius: 4px; }
-        label { display: block; margin-bottom: 0.5rem; }
-        input[type="text"], input[type="number"] { width: 100%; padding: 0.5rem; margin-bottom: 1rem; box-sizing: border-box; }
-        button { padding: 0.5rem 1rem; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; }
-        button:hover { background: #0056b3; }
-        #log { background: #f4f4f4; padding: 1rem; border-radius: 4px; height: 200px; overflow-y: auto; white-space: pre-wrap; }
-    </style>
+    <title>ExifScan 仪表盘</title>
+    <link rel="stylesheet" href="/style.css">
 </head>
+
 <body>
 
-<h1>ExifScan Control Panel</h1>
+    <div class="container">
+        <div class="nav">
+            <a href="/settings.html">⚙️ 设置</a>
+        </div>
 
-<div class="card">
-    <h2>Configuration</h2>
-    <form id="configForm">
-        <label>Server Port</label>
-        <input type="number" id="serverPort" name="server.port">
+        <h1>ExifScan</h1>
 
-        <label>Database Driver (mysql/sqlite)</label>
-        <input type="text" id="dbDriver" name="database.driver">
-        
-        <label>Database Source (DSN or File Path)</label>
-        <input type="text" id="dbSource" name="database.source">
-        
-        <label>Database Table</label>
-        <input type="text" id="dbTable" name="database.table">
+        <div class="card">
+            <h2>开始扫描</h2>
+            <div class="form-group">
+                <label>扫描目录</label>
+                <div class="input-group">
+                    <input type="text" id="scanPath" placeholder="选择或输入文件夹路径..." value="D:\Photos">
+                    <button type="button" id="browseBtn">📂 选择文件夹</button>
+                </div>
+            </div>
 
-        <label>Scan Path</label>
-        <input type="text" id="scanPath" name="scan.path">
+            <button id="scanBtn" class="block">🚀 开始扫描</button>
 
-        <label>Excel Output File</label>
-        <input type="text" id="excelOutput" name="excel.output">
+            <div id="message"></div>
+        </div>
 
-        <button type="submit">Update Config</button>
-    </form>
-</div>
+        <div class="card" id="resultCard" style="display:none;">
+            <h2>扫描结果</h2>
+            <p id="resultText"></p>
+        </div>
+    </div>
 
-<div class="card">
-    <h2>Operations</h2>
-    <button id="scanBtn">Start Scan</button>
-</div>
+    <!-- Directory Picker Modal -->
+    <div id="dirModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 style="margin:0">选择文件夹</h3>
+                <span style="cursor:pointer; font-size:1.5rem;" id="closeModal">&times;</span>
+            </div>
+            <div style="padding: 10px 20px; background: #fafafa; border-bottom: 1px solid #eee;">
+                当前: <span id="currentPath" style="font-family:monospace;"></span>
+            </div>
+            <div class="modal-body" id="fileList"></div>
+            <div class="modal-footer">
+                <button type="button" class="secondary" id="upDirBtn">⬆️ 上级目录</button>
+                <button type="button" id="selectDirBtn">✅ 选择此目录</button>
+            </div>
+        </div>
+    </div>
 
-<div class="card">
-    <h2>Log</h2>
-    <div id="log"></div>
-</div>
+    <script>
+        const scanBtn = document.getElementById('scanBtn');
+        const msgDiv = document.getElementById('message');
+        const resultCard = document.getElementById('resultCard');
+        const resultText = document.getElementById('resultText');
 
-<script>
-    const logDiv = document.getElementById('log');
-    function log(msg) {
-        logDiv.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
-        logDiv.scrollTop = logDiv.scrollHeight;
-    }
+        function showMessage(msg, isError = false) {
+            msgDiv.style.display = 'block';
+            msgDiv.className = isError ? 'error' : 'success';
+            msgDiv.innerText = msg;
+        }
 
-    // Load Config
-    fetch('/api/config')
-        .then(res => res.json())
-        .then(data => {
-            document.getElementById('serverPort').value = data.server.port;
-            document.getElementById('dbDriver').value = data.database.driver;
-            document.getElementById('dbSource').value = data.database.source;
-            document.getElementById('dbTable').value = data.database.table;
-            document.getElementById('scanPath').value = data.scan.path;
-            document.getElementById('excelOutput').value = data.excel.output;
-            log('Configuration loaded.');
-        })
-        .catch(err => log('Error loading config: ' + err));
+        // --- Directory Picker Logic (Shared with Settings, kept inline for simplicity or could be extracted) ---
+        const modal = document.getElementById('dirModal');
+        const browseBtn = document.getElementById('browseBtn');
+        const closeModal = document.getElementById('closeModal');
+        const fileList = document.getElementById('fileList');
+        const currentPathSpan = document.getElementById('currentPath');
+        const upDirBtn = document.getElementById('upDirBtn');
+        const selectDirBtn = document.getElementById('selectDirBtn');
 
-    // Update Config
-    document.getElementById('configForm').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const config = {
-            server: { port: parseInt(document.getElementById('serverPort').value) },
-            database: {
-                driver: document.getElementById('dbDriver').value,
-                source: document.getElementById('dbSource').value,
-                table: document.getElementById('dbTable').value
-            },
-            scan: {
-                path: document.getElementById('scanPath').value,
-                // extensions not editable in UI for now, kept server-side default or existing
-            },
-            excel: {
-                output: document.getElementById('excelOutput').value
-            }
+        let currentPath = "";
+
+        browseBtn.onclick = () => {
+            modal.style.display = "block";
+            let startPath = document.getElementById('scanPath').value || "";
+            loadDir(startPath);
+        }
+        closeModal.onclick = () => modal.style.display = "none";
+        window.onclick = (e) => { if (e.target == modal) modal.style.display = "none"; }
+
+        function loadDir(path) {
+            fetch(`/api/fs/list?path=${encodeURIComponent(path)}`)
+                .then(res => res.json())
+                .then(files => {
+                    if (files.error) {
+                        // if error (e.g. empty path on windows -> drives), try empty
+                        if (path !== "") loadDir("");
+                        else alert("无法读取: " + files.error);
+                        return;
+                    }
+                    currentPath = path;
+                    currentPathSpan.innerText = path || "此电脑";
+
+                    fileList.innerHTML = '';
+                    files.forEach(file => {
+                        const div = document.createElement('div');
+                        div.className = 'file-item';
+                        const icon = file.isDir ? '📁' : '📄';
+                        div.innerHTML = `<span class="file-icon">${icon}</span> ${file.name}`;
+                        if (file.isDir) {
+                            div.onclick = () => loadDir(file.path);
+                        }
+                        fileList.appendChild(div);
+                    });
+                })
+                .catch(err => console.error(err));
+        }
+
+        upDirBtn.onclick = () => {
+            if (!currentPath) return;
+            // Simple parent logic
+            if (currentPath.match(/^[a-zA-Z]:\\?$/)) { loadDir(""); return; }
+            const separator = currentPath.includes('/') ? '/' : '\\';
+            const parts = currentPath.split(separator).filter(p => p);
+            parts.pop();
+            if (parts.length === 1 && parts[0].match(/^[a-zA-Z]:$/)) loadDir(parts[0] + "\\");
+            else if (parts.length === 0) loadDir("");
+            else loadDir(parts.join(separator));
         };
 
-        fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(config)
-        })
-        .then(res => {
-            if (res.ok) log('Configuration updated.');
-            else log('Failed to update configuration.');
-        })
-        .catch(err => log('Error updating config: ' + err));
-    });
+        selectDirBtn.onclick = () => {
+            if (currentPath === "") { alert("请选择具体文件夹"); return; }
+            document.getElementById('scanPath').value = currentPath;
+            modal.style.display = "none";
+        };
 
-    // Start Scan
-    document.getElementById('scanBtn').addEventListener('click', () => {
-        log('Starting scan...');
-        fetch('/api/scan', { method: 'POST' })
+        // --- Scan Logic ---
+        scanBtn.addEventListener('click', () => {
+            const path = document.getElementById('scanPath').value;
+            if (!path) {
+                showMessage("请输入或选择扫描路径", true);
+                return;
+            }
+
+            showMessage("正在扫描，请稍候...");
+            scanBtn.disabled = true;
+            resultCard.style.display = 'none';
+
+            fetch('/api/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: path })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    scanBtn.disabled = false;
+                    if (data.success) {
+                        showMessage(`✅ 扫描完成! 发现 ${data.count} 张图片。`);
+                        resultText.innerText = data.message;
+                        resultCard.style.display = 'block';
+                    } else {
+                        showMessage("❌ 扫描失败: " + data.message, true);
+                    }
+                })
+                .catch(error => {
+                    scanBtn.disabled = false;
+                    showMessage("❌ 请求出错: " + error, true);
+                });
+        });
+
+        // Load initial config path
+        fetch('/api/config')
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    log(`Scan complete. Processed ${data.count} images.`);
-                } else {
-                    log(`Scan failed: ${data.message}`);
+                if (data.scan && data.scan.path) {
+                    document.getElementById('scanPath').value = data.scan.path;
                 }
-            })
-            .catch(err => log('Error during scan: ' + err));
-    });
-</script>
+            });
+
+    </script>
 
 </body>
+
 </html>

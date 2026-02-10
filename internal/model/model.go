@@ -12,18 +12,24 @@ type Exif struct {
 
 type Config struct {
 	Server struct {
-		Port int `yaml:"port"`
-	} `yaml:"server"`
+		Port int `yaml:"port" json:"port"`
+	} `yaml:"server" json:"server"`
 	Database struct {
-		Driver string `yaml:"driver"`
-		Source string `yaml:"source"`
-		Table  string `yaml:"table"`
-	} `yaml:"database"`
+		Enabled bool   `yaml:"enabled" json:"enabled"`
+		Driver  string `yaml:"driver" json:"driver"`
+		Source  string `yaml:"source" json:"source"`
+		Table   string `yaml:"table" json:"table"`
+	} `yaml:"database" json:"database"`
 	Scan struct {
-		Path       string   `yaml:"path"`
-		Extensions []string `yaml:"extensions"`
-	} `yaml:"scan"`
+		Path       string   `yaml:"path" json:"path"`
+		Extensions []string `yaml:"extensions" json:"extensions"`
+	} `yaml:"scan" json:"scan"`
 	Excel struct {
-		Output string `yaml:"output"`
-	} `yaml:"excel"`
+		Enabled bool   `yaml:"enabled" json:"enabled"`
+		Output  string `yaml:"output" json:"output"`
+	} `yaml:"excel" json:"excel"`
+	Json struct {
+		Enabled bool   `yaml:"enabled" json:"enabled"`
+		Output  string `yaml:"output" json:"output"`
+	} `yaml:"json" json:"json"`
 }

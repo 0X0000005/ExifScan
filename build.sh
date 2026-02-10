@@ -22,13 +22,13 @@ for PLATFORM in $PLATFORMS; do
     GOOS=${PLATFORM%/*}
     GOARCH=${PLATFORM#*/}
     if [ "$GOOS" == "windows" ]; then
-        OUTPUT_FILENAME="wm.exe"
+        OUTPUT_FILENAME="ExifScan.exe"
     else
-        OUTPUT_FILENAME="wm"
+        OUTPUT_FILENAME="ExifScan"
     fi
 
     echo "正在构建 $GOOS/$GOARCH..."
-    env GOOS=$GOOS GOARCH=$GOARCH go build -o $OUTPUT_DIR/$OUTPUT_FILENAME cmd/server/main.go
+    env GOOS=$GOOS GOARCH=$GOARCH go build -o $OUTPUT_DIR/$OUTPUT_FILENAME cmd/exifScan/main.go
 
     if [ $? -ne 0 ]; then
         echo "发生错误！终止脚本执行..."

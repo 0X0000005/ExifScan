@@ -1,30 +1,50 @@
 package web
 
 import (
-	"encoding/json"
 	"exifScan/internal/config"
-	"exifScan/internal/model"
 	"fmt"
 	"log"
-	"net/http"
+	"path/filepath"
+
+	"github.com/gin-gonic/gin"
 )
 
 func StartServer() {
-	mux := http.NewServeMux()
+	log.Println("Initializing Gin...")
+	r := gin.Default()
 
 	// Static files
-	// In production, you might want to embed these using `embed` package
-	// For now, serving from disk for simplicity during dev, or embed if requested.
-	// Plan said "Frontend will be embedded in binary". So let's prepare for embed,
-	// but for now I'll serve from directory relative to binary or just code it.
-	// Actually, I'll just serve the static directory.
+	// Static files
+	staticDir := "./internal/web/static"
+	if absPath, err := filepath.Abs(staticDir); err == nil {
+		log.Printf("Serving static files from: %s", absPath)
+	}
 
-	fs := http.FileServer(http.Dir("internal/web/static"))
-	mux.Handle("/", fs)
+	r.Static("/static", staticDir) // Serve assets under /static if any
+
+	// Serve HTML files directly at root
+	r.GET("/", func(c *gin.Context) {
+		c.File(filepath.Join(staticDir, "index.html"))
+	})
+	r.GET("/index.html", func(c *gin.Context) {
+		c.File(filepath.Join(staticDir, "index.html"))
+	})
+	r.GET("/settings.html", func(c *gin.Context) {
+		c.File(filepath.Join(staticDir, "settings.html"))
+	})
+	r.GET("/style.css", func(c *gin.Context) {
+		c.File(filepath.Join(staticDir, "style.css"))
+	})
 
 	// API endpoints
-	mux.HandleFunc("/api/config", handleConfig)
-	mux.HandleFunc("/api/scan", handleScan)
+	log.Println("Setting up API endpoints...")
+	api := r.Group("/api")
+	{
+		api.GET("/config", handleGetConfig)
+		api.POST("/config", handleUpdateConfig)
+		api.POST("/scan", handleScan)
+		api.GET("/fs/list", handleListDir)
+	}
 
 	port := config.AppConfig.Server.Port
 	if port == 0 {
@@ -32,31 +52,8 @@ func StartServer() {
 	}
 
 	log.Printf("Starting web server on port %d...", port)
-	err := http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
+	err := r.Run(fmt.Sprintf(":%d", port))
 	if err != nil {
 		log.Fatal(err)
-	}
-}
-
-func handleConfig(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		json.NewEncoder(w).Encode(config.AppConfig)
-	} else if r.Method == http.MethodPost {
-		// Update config logic (simplified, in-memory updates for run)
-		// For persistence, we'd need to write back to config.yaml
-		// Here we just update the in-memory struct
-		var newConfig model.Config
-		if err := json.NewDecoder(r.Body).Decode(&newConfig); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		// Carefully update allowlisted fields
-		config.AppConfig.Database = newConfig.Database
-		config.AppConfig.Scan = newConfig.Scan
-		config.AppConfig.Excel = newConfig.Excel
-
-		w.WriteHeader(http.StatusOK)
-	} else {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }

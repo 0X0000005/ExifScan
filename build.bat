@@ -23,16 +23,16 @@ for %%P in (%PLATFORMS%) do (
         set CURRENT_GOOS=%%a
         set CURRENT_GOARCH=%%b
         if "!CURRENT_GOOS!"=="windows" (
-            set OUTPUT_FILENAME=wm.exe
+            set OUTPUT_FILENAME=ExifScan.exe
         ) else (
-            set OUTPUT_FILENAME=wm
+            set OUTPUT_FILENAME=ExifScan
         )
         
         echo Building !CURRENT_GOOS!/!CURRENT_GOARCH!...
         set GOOS=!CURRENT_GOOS!
         set GOARCH=!CURRENT_GOARCH!
         
-        go build -o %OUTPUT_DIR%\!OUTPUT_FILENAME! cmd\server\main.go
+        go build -o %OUTPUT_DIR%\!OUTPUT_FILENAME! cmd\exifScan\main.go
         
         if !errorlevel! neq 0 (
             echo Build failed!
