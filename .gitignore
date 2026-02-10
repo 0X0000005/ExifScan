@@ -17,7 +17,12 @@
 # Project specific
 dist/
 wallpapers/
+config.yaml
 config_*.yaml
+*.db
+*.log
+debug_output.txt
+ExifScan
 
 # Build artifacts
 WM-*
