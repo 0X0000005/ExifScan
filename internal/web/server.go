@@ -1,40 +1,41 @@
 package web
 
 import (
+	"embed"
 	"exifScan/internal/config"
 	"fmt"
+	"io/fs"
 	"log"
-	"path/filepath"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
+
+//go:embed static/*
+var staticFS embed.FS
 
 func StartServer() {
 	log.Println("Initializing Gin...")
 	r := gin.Default()
 
-	// Static files
-	// Static files
-	staticDir := "./internal/web/static"
-	if absPath, err := filepath.Abs(staticDir); err == nil {
-		log.Printf("Serving static files from: %s", absPath)
+	// Get sub filesystem for "static" folder to simplify paths
+	fSys, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	r.Static("/static", staticDir) // Serve assets under /static if any
+	// Serve static assets
+	r.StaticFS("/static", http.FS(fSys))
 
-	// Serve HTML files directly at root
-	r.GET("/", func(c *gin.Context) {
-		c.File(filepath.Join(staticDir, "index.html"))
-	})
-	r.GET("/index.html", func(c *gin.Context) {
-		c.File(filepath.Join(staticDir, "index.html"))
-	})
-	r.GET("/settings.html", func(c *gin.Context) {
-		c.File(filepath.Join(staticDir, "settings.html"))
-	})
-	r.GET("/style.css", func(c *gin.Context) {
-		c.File(filepath.Join(staticDir, "style.css"))
-	})
+	// Serve HTML files directly at root/endpoints
+	serve := func(c *gin.Context, file string) {
+		serveEmbeddedFile(c, fSys, file)
+	}
+
+	r.GET("/", func(c *gin.Context) { serve(c, "index.html") })
+	r.GET("/index.html", func(c *gin.Context) { serve(c, "index.html") })
+	r.GET("/settings.html", func(c *gin.Context) { serve(c, "settings.html") })
+	r.GET("/style.css", func(c *gin.Context) { serve(c, "style.css") })
 
 	// API endpoints
 	log.Println("Setting up API endpoints...")
@@ -52,8 +53,23 @@ func StartServer() {
 	}
 
 	log.Printf("Starting web server on port %d...", port)
-	err := r.Run(fmt.Sprintf(":%d", port))
+	err = r.Run(fmt.Sprintf(":%d", port))
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func serveEmbeddedFile(c *gin.Context, fSys fs.FS, path string) {
+	file, err := fSys.Open(path)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+
+	stat, _ := file.Stat()
+	http.ServeContent(c.Writer, c.Request, path, stat.ModTime(), file.(interface {
+		Read([]byte) (int, error)
+		Seek(int64, int) (int64, error)
+	}))
 }
