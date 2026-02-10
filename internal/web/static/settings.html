@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ExifScan 设置</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="nav">
+            <a href="/">← 返回控制面板</a>
+        </div>
+
+        <h1>系统设置</h1>
+
+        <div class="card">
+            <form id="configForm">
+                <!-- Server Section -->
+                <div class="form-group">
+                    <h3>🖥️ 服务器</h3>
+                    <label>端口 (Port)</label>
+                    <input type="number" id="serverPort" name="server.port">
+                </div>
+
+                <hr style="border:0; border-top:1px solid #eee; margin: 20px 0;">
+
+                <!-- Output Options -->
+                <h3>💾 输出选项</h3>
+
+                <!-- Database -->
+                <div class="toggle-group">
+                    <input type="checkbox" id="dbEnabled">
+                    <label for="dbEnabled">启用数据库保存 (Database)</label>
+                </div>
+                <div id="dbSettings" class="config-section">
+                    <label>驱动 (Driver)</label>
+                    <input type="text" id="dbDriver" placeholder="sqlite 或 mysql">
+                    <div style="margin-top:10px;"></div>
+                    <label>源 (Source)</label>
+                    <input type="text" id="dbSource" placeholder="文件路径 或 DSN">
+                    <div style="margin-top:10px;"></div>
+                    <label>表名 (Table)</label>
+                    <input type="text" id="dbTable">
+                </div>
+
+                <!-- Excel -->
+                <div class="toggle-group">
+                    <input type="checkbox" id="excelEnabled">
+                    <label for="excelEnabled">启用 Excel 导出</label>
+                </div>
+                <div id="excelSettings" class="config-section">
+                    <label>输出文件 (Filename)</label>
+                    <input type="text" id="excelOutput">
+                </div>
+
+                <!-- JSON -->
+                <div class="toggle-group">
+                    <input type="checkbox" id="jsonEnabled">
+                    <label for="jsonEnabled">启用 JSON 导出</label>
+                </div>
+                <div id="jsonSettings" class="config-section">
+                    <label>输出文件 (Filename)</label>
+                    <input type="text" id="jsonOutput">
+                </div>
+
+                <div style="margin-top: 30px; text-align: center;">
+                    <button type="submit" style="padding: 12px 40px; font-size: 1.1rem;">💾 保存配置</button>
+                </div>
+            </form>
+            <div id="message"></div>
+        </div>
+    </div>
+
+    <script>
+        const msgDiv = document.getElementById('message');
+        function showMessage(msg, isError = false) {
+            msgDiv.style.display = 'block';
+            msgDiv.className = isError ? 'error' : 'success';
+            msgDiv.innerText = msg;
+            setTimeout(() => { msgDiv.style.display = 'none'; }, 3000);
+        }
+
+        function toggleDisplay(checkboxId, divId) {
+            const cb = document.getElementById(checkboxId);
+            const div = document.getElementById(divId);
+            const inputs = div.querySelectorAll('input');
+            if (cb.checked) {
+                div.classList.remove('disabled');
+                inputs.forEach(input => input.disabled = false);
+            } else {
+                div.classList.add('disabled');
+                inputs.forEach(input => input.disabled = true);
+            }
+        }
+
+        document.getElementById('dbEnabled').addEventListener('change', () => toggleDisplay('dbEnabled', 'dbSettings'));
+        document.getElementById('excelEnabled').addEventListener('change', () => toggleDisplay('excelEnabled', 'excelSettings'));
+        document.getElementById('jsonEnabled').addEventListener('change', () => toggleDisplay('jsonEnabled', 'jsonSettings'));
+
+        // Load Config
+        fetch('/api/config')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('serverPort').value = data.server.port;
+
+                document.getElementById('dbEnabled').checked = data.database.enabled;
+                document.getElementById('dbDriver').value = data.database.driver;
+                document.getElementById('dbSource').value = data.database.source;
+                document.getElementById('dbTable').value = data.database.table;
+                toggleDisplay('dbEnabled', 'dbSettings');
+
+                document.getElementById('excelEnabled').checked = data.excel.enabled;
+                document.getElementById('excelOutput').value = data.excel.output;
+                toggleDisplay('excelEnabled', 'excelSettings');
+
+                document.getElementById('jsonEnabled').checked = data.json ? data.json.enabled : false;
+                document.getElementById('jsonOutput').value = data.json ? data.json.output : 'scan_results.json';
+                toggleDisplay('jsonEnabled', 'jsonSettings');
+            })
+            .catch(err => showMessage('加载配置失败: ' + err, true));
+
+        // Save Config
+        document.getElementById('configForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const config = {
+                server: { port: parseInt(document.getElementById('serverPort').value) },
+                database: {
+                    enabled: document.getElementById('dbEnabled').checked,
+                    driver: document.getElementById('dbDriver').value,
+                    source: document.getElementById('dbSource').value,
+                    table: document.getElementById('dbTable').value
+                },
+                scan: {
+                    // Path defaults to whatever backend has, or we can leave it empty to not overwrite if we aren't showing it here.
+                    // Actually we need to be careful not to wipe it.
+                    // Best to fetch current or let backend handle merge? 
+                    // For simplicity, let's just send what we have. Backend merge logic isn't robust.
+                    // We should probably preserve it.
+                    path: "", // Backend should probably preserve if we don't send? 
+                    // Actually, let's fetch it first or store it.
+                    // The JS load kept it in memory? No.
+                    // Let's just assume we don't change path here. 
+                    // Wait, `handleUpdateConfig` replaces the whole struct.
+                    // I need to fetch current config first or fix backend to patch.
+                    // Let's just fetch current config again to be safe/lazy?
+                    // Or let's make `path` hidden field?
+                },
+                excel: {
+                    enabled: document.getElementById('excelEnabled').checked,
+                    output: document.getElementById('excelOutput').value
+                },
+                json: {
+                    enabled: document.getElementById('jsonEnabled').checked,
+                    output: document.getElementById('jsonOutput').value
+                }
+            };
+
+            // We need to preserve scan path.
+            fetch('/api/config')
+                .then(res => res.json())
+                .then(current => {
+                    config.scan.path = current.scan.path;
+                    config.scan.extensions = current.scan.extensions; // preserve ext too
+
+                    return fetch('/api/config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(config)
+                    });
+                })
+                .then(res => {
+                    if (res.ok) showMessage('配置已保存');
+                    else showMessage('保存配置失败', true);
+                })
+                .catch(err => showMessage('保存配置出错: ' + err, true));
+        });
+    </script>
+
+</body>
+
+</html>

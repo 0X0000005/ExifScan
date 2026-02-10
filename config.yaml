@@ -1,0 +1,20 @@
+server:
+  port: 8080
+
+database:
+  enabled: true
+  driver: sqlite # sqlite or mysql
+  source: exif_data.db # file path for sqlite or dsn for mysql
+  table: photo_data
+
+scan:
+  path: "" # Default scan path
+  extensions: [".jpg", ".jpeg", ".png", ".arw", ".tiff"]
+
+excel:
+  enabled: true
+  output: "scan_results.xlsx"
+
+json:
+  enabled: true
+  output: "scan_results.json"
