@@ -45,6 +45,10 @@ func StartServer() {
 		api.POST("/config", handleUpdateConfig)
 		api.POST("/scan", handleScan)
 		api.GET("/fs/list", handleListDir)
+		api.GET("/results", handleGetResults)
+		api.POST("/results/import", handleImportJSON)
+		api.GET("/download/excel", handleDownloadExcel)
+		api.GET("/download/json", handleDownloadJSON)
 	}
 
 	port := config.AppConfig.Server.Port

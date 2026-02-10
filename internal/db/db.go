@@ -8,7 +8,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3" 
+	_ "github.com/mattn/go-sqlite3"
 )
 
 var DB *sqlx.DB
@@ -94,4 +94,15 @@ func Save(data []*model.Exif) error {
 	}
 
 	return tx.Commit()
+}
+
+// Query 从数据库加载所有扫描记录
+func Query() ([]*model.Exif, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	table := config.AppConfig.Database.Table
+	var results []*model.Exif
+	err := DB.Select(&results, fmt.Sprintf("SELECT file, exposureTime, iso, fNumber, focalLength, model, originDate FROM %s", table))
+	return results, err
 }

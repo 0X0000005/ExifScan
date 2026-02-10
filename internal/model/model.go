@@ -10,6 +10,23 @@ type Exif struct {
 	OriginDate   string `db:"originDate" json:"originDate"`
 }
 
+// ScanStats 扫描统计摘要
+type ScanStats struct {
+	TotalCount   int            `json:"totalCount"`
+	ModelDist    map[string]int `json:"modelDist"`    // 相机型号分布
+	ISODist      map[string]int `json:"isoDist"`      // ISO 分布
+	FNumberDist  map[string]int `json:"fNumberDist"`  // 光圈分布
+	FocalLenDist map[string]int `json:"focalLenDist"` // 焦距分布
+}
+
+// ScanResult 完整扫描结果
+type ScanResult struct {
+	Success bool      `json:"success"`
+	Message string    `json:"message"`
+	Stats   ScanStats `json:"stats"`
+	Data    []*Exif   `json:"data"`
+}
+
 type Config struct {
 	Server struct {
 		Port int `yaml:"port" json:"port"`

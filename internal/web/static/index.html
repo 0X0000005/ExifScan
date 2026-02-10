@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ExifScan 仪表盘</title>
     <link rel="stylesheet" href="/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 
 <body>
@@ -15,26 +16,100 @@
             <a href="/settings.html">⚙️ 设置</a>
         </div>
 
-        <h1>ExifScan</h1>
+        <h1>📷 ExifScan</h1>
 
         <div class="card">
             <h2>开始扫描</h2>
             <div class="form-group">
                 <label>扫描目录</label>
                 <div class="input-group">
-                    <input type="text" id="scanPath" placeholder="选择或输入文件夹路径..." value="D:\Photos">
-                    <button type="button" id="browseBtn">📂 选择文件夹</button>
+                    <input type="text" id="scanPath" placeholder="选择或输入文件夹路径...">
+                    <button type="button" id="browseBtn">📂 选择</button>
                 </div>
             </div>
 
-            <button id="scanBtn" class="block">🚀 开始扫描</button>
+            <div class="action-bar">
+                <button id="scanBtn" class="primary-action">🚀 开始扫描</button>
+                <button id="loadHistoryBtn" class="secondary-action">📊 加载历史</button>
+                <label class="file-upload-label" for="importFile">📥 导入JSON</label>
+                <input type="file" id="importFile" accept=".json" style="display:none;">
+            </div>
 
             <div id="message"></div>
         </div>
 
-        <div class="card" id="resultCard" style="display:none;">
-            <h2>扫描结果</h2>
-            <p id="resultText"></p>
+        <!-- 统计摘要 -->
+        <div class="card" id="statsCard" style="display:none;">
+            <h2>📈 统计概览</h2>
+            <div class="stats-summary">
+                <div class="stat-item">
+                    <span class="stat-value" id="totalCount">0</span>
+                    <span class="stat-label">总图片数</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="topModel">-</span>
+                    <span class="stat-label">最多机型</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="topISO">-</span>
+                    <span class="stat-label">最多ISO</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="topFNumber">-</span>
+                    <span class="stat-label">最多光圈</span>
+                </div>
+            </div>
+
+            <div class="download-bar">
+                <a href="/api/download/excel" class="download-btn" id="dlExcel">📥 下载 Excel</a>
+                <a href="/api/download/json" class="download-btn" id="dlJson">📥 下载 JSON</a>
+            </div>
+        </div>
+
+        <!-- 图表区域 -->
+        <div id="chartsSection" style="display:none;">
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>📷 相机型号分布</h3>
+                    <canvas id="modelChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>🔆 ISO 分布</h3>
+                    <canvas id="isoChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>🔅 光圈分布</h3>
+                    <canvas id="fnumberChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>🔭 焦距分布</h3>
+                    <canvas id="focalChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="card" id="tableCard" style="display:none;">
+            <div class="table-header">
+                <h2>📋 数据列表</h2>
+                <button type="button" id="toggleTableBtn" class="secondary small">展开/收起</button>
+            </div>
+            <div id="tableWrapper" class="table-wrapper collapsed">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>文件</th>
+                            <th>快门速度</th>
+                            <th>ISO</th>
+                            <th>光圈</th>
+                            <th>焦距</th>
+                            <th>机型</th>
+                            <th>拍摄日期</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -57,10 +132,27 @@
     </div>
 
     <script>
+        // ===== 元素引用 =====
         const scanBtn = document.getElementById('scanBtn');
+        const loadHistoryBtn = document.getElementById('loadHistoryBtn');
+        const importFile = document.getElementById('importFile');
         const msgDiv = document.getElementById('message');
-        const resultCard = document.getElementById('resultCard');
-        const resultText = document.getElementById('resultText');
+        const statsCard = document.getElementById('statsCard');
+        const chartsSection = document.getElementById('chartsSection');
+        const tableCard = document.getElementById('tableCard');
+        const tableWrapper = document.getElementById('tableWrapper');
+        const toggleTableBtn = document.getElementById('toggleTableBtn');
+
+        // Chart 实例
+        let modelChart, isoChart, fnumberChart, focalChart;
+
+        // 颜色调色板
+        const palette = [
+            '#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f',
+            '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac',
+            '#86bcb6', '#8cd17d', '#b6992d', '#499894', '#e15759',
+            '#f1ce63', '#d37295', '#a0cbe8', '#ffbe7d', '#d4a6c8'
+        ];
 
         function showMessage(msg, isError = false) {
             msgDiv.style.display = 'block';
@@ -68,7 +160,7 @@
             msgDiv.innerText = msg;
         }
 
-        // --- Directory Picker Logic (Shared with Settings, kept inline for simplicity or could be extracted) ---
+        // ===== 目录选择器 =====
         const modal = document.getElementById('dirModal');
         const browseBtn = document.getElementById('browseBtn');
         const closeModal = document.getElementById('closeModal');
@@ -88,11 +180,11 @@
         window.onclick = (e) => { if (e.target == modal) modal.style.display = "none"; }
 
         function loadDir(path) {
+            fileList.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">加载中...</div>';
             fetch(`/api/fs/list?path=${encodeURIComponent(path)}`)
                 .then(res => res.json())
                 .then(files => {
                     if (files.error) {
-                        // if error (e.g. empty path on windows -> drives), try empty
                         if (path !== "") loadDir("");
                         else alert("无法读取: " + files.error);
                         return;
@@ -101,14 +193,15 @@
                     currentPathSpan.innerText = path || "此电脑";
 
                     fileList.innerHTML = '';
+                    if (files.length === 0) {
+                        fileList.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">无子目录</div>';
+                        return;
+                    }
                     files.forEach(file => {
                         const div = document.createElement('div');
                         div.className = 'file-item';
-                        const icon = file.isDir ? '📁' : '📄';
-                        div.innerHTML = `<span class="file-icon">${icon}</span> ${file.name}`;
-                        if (file.isDir) {
-                            div.onclick = () => loadDir(file.path);
-                        }
+                        div.innerHTML = `<span class="file-icon">📁</span> ${file.name}`;
+                        div.onclick = () => loadDir(file.path);
                         fileList.appendChild(div);
                     });
                 })
@@ -117,7 +210,6 @@
 
         upDirBtn.onclick = () => {
             if (!currentPath) return;
-            // Simple parent logic
             if (currentPath.match(/^[a-zA-Z]:\\?$/)) { loadDir(""); return; }
             const separator = currentPath.includes('/') ? '/' : '\\';
             const parts = currentPath.split(separator).filter(p => p);
@@ -133,7 +225,7 @@
             modal.style.display = "none";
         };
 
-        // --- Scan Logic ---
+        // ===== 扫描逻辑 =====
         scanBtn.addEventListener('click', () => {
             const path = document.getElementById('scanPath').value;
             if (!path) {
@@ -143,7 +235,7 @@
 
             showMessage("正在扫描，请稍候...");
             scanBtn.disabled = true;
-            resultCard.style.display = 'none';
+            hideResults();
 
             fetch('/api/scan', {
                 method: 'POST',
@@ -154,9 +246,8 @@
                 .then(data => {
                     scanBtn.disabled = false;
                     if (data.success) {
-                        showMessage(`✅ 扫描完成! 发现 ${data.count} 张图片。`);
-                        resultText.innerText = data.message;
-                        resultCard.style.display = 'block';
+                        showMessage(`✅ 扫描完成! 发现 ${data.stats.totalCount} 张图片。`);
+                        renderResults(data);
                     } else {
                         showMessage("❌ 扫描失败: " + data.message, true);
                     }
@@ -167,7 +258,187 @@
                 });
         });
 
-        // Load initial config path
+        // ===== 加载历史 =====
+        loadHistoryBtn.addEventListener('click', () => {
+            showMessage("正在加载历史数据...");
+            loadHistoryBtn.disabled = true;
+            hideResults();
+
+            fetch('/api/results')
+                .then(res => res.json())
+                .then(data => {
+                    loadHistoryBtn.disabled = false;
+                    if (data.success) {
+                        showMessage(`✅ ${data.message}，共 ${data.stats.totalCount} 条记录。`);
+                        renderResults(data);
+                    } else {
+                        showMessage("❌ " + data.message, true);
+                    }
+                })
+                .catch(err => {
+                    loadHistoryBtn.disabled = false;
+                    showMessage("❌ 请求出错: " + err, true);
+                });
+        });
+
+        // ===== 导入 JSON =====
+        importFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            showMessage("正在导入...");
+            hideResults();
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/api/results/import', {
+                method: 'POST',
+                body: formData
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(`✅ ${data.message}，共 ${data.stats.totalCount} 条记录。`);
+                        renderResults(data);
+                    } else {
+                        showMessage("❌ " + data.message, true);
+                    }
+                    importFile.value = '';
+                })
+                .catch(err => {
+                    showMessage("❌ 导入出错: " + err, true);
+                    importFile.value = '';
+                });
+        });
+
+        // ===== 表格折叠 =====
+        toggleTableBtn.addEventListener('click', () => {
+            tableWrapper.classList.toggle('collapsed');
+        });
+
+        // ===== 隐藏结果区域 =====
+        function hideResults() {
+            statsCard.style.display = 'none';
+            chartsSection.style.display = 'none';
+            tableCard.style.display = 'none';
+        }
+
+        // ===== 渲染完整结果 =====
+        function renderResults(data) {
+            const stats = data.stats;
+
+            // 统计概览
+            document.getElementById('totalCount').textContent = stats.totalCount;
+            document.getElementById('topModel').textContent = getTopKey(stats.modelDist) || '-';
+            document.getElementById('topISO').textContent = getTopKey(stats.isoDist) || '-';
+            document.getElementById('topFNumber').textContent = getTopKey(stats.fNumberDist) || '-';
+            statsCard.style.display = 'block';
+
+            // 图表
+            chartsSection.style.display = 'block';
+            renderCharts(stats);
+
+            // 数据表格
+            renderTable(data.data);
+            tableCard.style.display = 'block';
+        }
+
+        function getTopKey(dist) {
+            if (!dist || Object.keys(dist).length === 0) return null;
+            return Object.entries(dist).sort((a, b) => b[1] - a[1])[0][0];
+        }
+
+        // ===== 图表渲染 =====
+        function renderCharts(stats) {
+            // 销毁旧图表
+            if (modelChart) modelChart.destroy();
+            if (isoChart) isoChart.destroy();
+            if (fnumberChart) fnumberChart.destroy();
+            if (focalChart) focalChart.destroy();
+
+            modelChart = createPieChart('modelChart', stats.modelDist, '相机型号');
+            isoChart = createBarChart('isoChart', stats.isoDist, 'ISO');
+            fnumberChart = createBarChart('fnumberChart', stats.fNumberDist, '光圈');
+            focalChart = createBarChart('focalChart', stats.focalLenDist, '焦距');
+        }
+
+        function createPieChart(canvasId, dist, title) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            const sorted = Object.entries(dist || {}).sort((a, b) => b[1] - a[1]);
+            return new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: sorted.map(e => e[0]),
+                    datasets: [{
+                        data: sorted.map(e => e[1]),
+                        backgroundColor: palette.slice(0, sorted.length),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { padding: 15, usePointStyle: true } }
+                    }
+                }
+            });
+        }
+
+        function createBarChart(canvasId, dist, title) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            const sorted = Object.entries(dist || {}).sort((a, b) => b[1] - a[1]);
+            return new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(e => e[0]),
+                    datasets: [{
+                        label: '数量',
+                        data: sorted.map(e => e[1]),
+                        backgroundColor: palette.slice(0, sorted.length),
+                        borderRadius: 6,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } },
+                        x: { ticks: { maxRotation: 45, minRotation: 0 } }
+                    }
+                }
+            });
+        }
+
+        // ===== 表格渲染 =====
+        function renderTable(data) {
+            const tbody = document.getElementById('dataTableBody');
+            tbody.innerHTML = '';
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#999;">无数据</td></tr>';
+                return;
+            }
+            data.forEach(item => {
+                const fileName = item.file ? item.file.split(/[/\\]/).pop() : '-';
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td title="${item.file || ''}">${fileName}</td>
+                    <td>${item.exposureTime || '-'}</td>
+                    <td>${item.iso || '-'}</td>
+                    <td>${item.fNumber || '-'}</td>
+                    <td>${item.focalLength || '-'}</td>
+                    <td>${item.model || '-'}</td>
+                    <td>${item.originDate || '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // ===== 初始化：加载配置路径 =====
         fetch('/api/config')
             .then(res => res.json())
             .then(data => {
