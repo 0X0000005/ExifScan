@@ -71,7 +71,9 @@ func TestHandleUpdateConfig(t *testing.T) {
 	newCfg := model.Config{}
 	newCfg.Server.Port = 9090
 	newCfg.Scan.Path = "/test"
-	newCfg.Scan.Extensions = []string{".jpg"}
+	newCfg.Scan.Extensions = []string{".jpg", ".raw"}
+	newCfg.Database.Driver = "mysql"
+	newCfg.Database.Source = "user:pass@tcp(localhost:3306)/test"
 
 	body, _ := json.Marshal(newCfg)
 	req := httptest.NewRequest("POST", "/api/config", bytes.NewReader(body))
@@ -81,6 +83,20 @@ func TestHandleUpdateConfig(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
+	}
+
+	// Verify global config is updated
+	if config.AppConfig.Server.Port != 9090 {
+		t.Errorf("expected port 9090, got %d", config.AppConfig.Server.Port)
+	}
+	if len(config.AppConfig.Scan.Extensions) != 2 {
+		t.Errorf("expected 2 extensions, got %d", len(config.AppConfig.Scan.Extensions))
+	}
+	if config.AppConfig.Scan.Extensions[1] != ".raw" {
+		t.Errorf("expected .raw, got %s", config.AppConfig.Scan.Extensions[1])
+	}
+	if config.AppConfig.Database.Driver != "mysql" {
+		t.Errorf("expected mysql driver, got %s", config.AppConfig.Database.Driver)
 	}
 }
 

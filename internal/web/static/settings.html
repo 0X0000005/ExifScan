@@ -6,6 +6,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ExifScan 设置</title>
     <link rel="stylesheet" href="/style.css">
+    <style>
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+        }
+
+        .checkbox-item input {
+            margin-right: 5px;
+            width: auto;
+        }
+
+        .checkbox-item label {
+            margin-bottom: 0;
+            font-weight: normal;
+            cursor: pointer;
+        }
+    </style>
 </head>
 
 <body>
@@ -28,6 +52,21 @@
 
                 <hr style="border:0; border-top:1px solid #eee; margin: 20px 0;">
 
+                <!-- Scanning Options -->
+                <h3>🔍 扫描选项</h3>
+                <div class="form-group">
+                    <label>文件格式筛选 (File Extensions)</label>
+                    <div class="checkbox-group" id="extensionGroup">
+                        <!-- Checkboxes will be generated here -->
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <label>自定义扩展名 (Custom Extensions, 逗号分隔)</label>
+                        <input type="text" id="customExtensions" placeholder=".raw, .dng">
+                    </div>
+                </div>
+
+                <hr style="border:0; border-top:1px solid #eee; margin: 20px 0;">
+
                 <!-- Output Options -->
                 <h3>💾 输出选项</h3>
 
@@ -38,11 +77,19 @@
                 </div>
                 <div id="dbSettings" class="config-section">
                     <label>驱动 (Driver)</label>
-                    <input type="text" id="dbDriver" placeholder="sqlite 或 mysql">
-                    <div style="margin-top:10px;"></div>
+                    <select id="dbDriver"
+                        style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <option value="sqlite3">SQLite</option>
+                        <option value="mysql">MySQL</option>
+                    </select>
+
                     <label>源 (Source)</label>
                     <input type="text" id="dbSource" placeholder="文件路径 或 DSN">
-                    <div style="margin-top:10px;"></div>
+                    <p id="dbSourceHelp" style="font-size: 0.8rem; color: #666; margin-top: -5px; margin-bottom: 10px;">
+                        SQLite: exfol_data.db<br>
+                        MySQL: user:password@tcp(localhost:3306)/dbname
+                    </p>
+
                     <label>表名 (Table)</label>
                     <input type="text" id="dbTable">
                 </div>
@@ -69,17 +116,20 @@
 
                 <div style="margin-top: 30px; text-align: center;">
                     <button type="submit" style="padding: 12px 40px; font-size: 1.1rem;">💾 保存配置</button>
+                    <div id="message" style="margin-top: 15px; display: none;"></div>
                 </div>
             </form>
-            <div id="message"></div>
         </div>
     </div>
 
     <script>
         const msgDiv = document.getElementById('message');
+        const commonExtensions = ['.jpg', '.jpeg', '.png', '.arw', '.cr2', '.nef', '.dng', '.tiff', '.bmp', '.gif'];
+
         function showMessage(msg, isError = false) {
             msgDiv.style.display = 'block';
-            msgDiv.className = isError ? 'error' : 'success';
+            msgDiv.className = isError ? 'error' : 'success'; // Ensure you have these classes in css or inline style
+            msgDiv.style.color = isError ? 'red' : 'green';
             msgDiv.innerText = msg;
             setTimeout(() => { msgDiv.style.display = 'none'; }, 3000);
         }
@@ -87,7 +137,7 @@
         function toggleDisplay(checkboxId, divId) {
             const cb = document.getElementById(checkboxId);
             const div = document.getElementById(divId);
-            const inputs = div.querySelectorAll('input');
+            const inputs = div.querySelectorAll('input, select');
             if (cb.checked) {
                 div.classList.remove('disabled');
                 inputs.forEach(input => input.disabled = false);
@@ -97,9 +147,31 @@
             }
         }
 
+        function updateDbHelp() {
+            const driver = document.getElementById('dbDriver').value;
+            const help = document.getElementById('dbSourceHelp');
+            if (driver === 'mysql') {
+                help.innerHTML = '格式: user:password@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local';
+                document.getElementById('dbSource').placeholder = 'root:123456@tcp(127.0.0.1:3306)/exif_db';
+            } else {
+                help.innerHTML = '文件路径，例如: exif_data.db';
+                document.getElementById('dbSource').placeholder = 'exif_data.db';
+            }
+        }
+
         document.getElementById('dbEnabled').addEventListener('change', () => toggleDisplay('dbEnabled', 'dbSettings'));
         document.getElementById('excelEnabled').addEventListener('change', () => toggleDisplay('excelEnabled', 'excelSettings'));
         document.getElementById('jsonEnabled').addEventListener('change', () => toggleDisplay('jsonEnabled', 'jsonSettings'));
+        document.getElementById('dbDriver').addEventListener('change', updateDbHelp);
+
+        // Generate Extension Checkboxes
+        const extGroup = document.getElementById('extensionGroup');
+        commonExtensions.forEach(ext => {
+            const div = document.createElement('div');
+            div.className = 'checkbox-item';
+            div.innerHTML = `<input type="checkbox" id="ext_${ext.replace('.', '')}" value="${ext}"><label for="ext_${ext.replace('.', '')}">${ext}</label>`;
+            extGroup.appendChild(div);
+        });
 
         // Load Config
         fetch('/api/config')
@@ -107,16 +179,35 @@
             .then(data => {
                 document.getElementById('serverPort').value = data.server.port;
 
+                // Extensions
+                const currentExts = data.scan.extensions || [];
+                const customExts = [];
+                currentExts.forEach(ext => {
+                    const lowerExt = ext.toLowerCase();
+                    if (commonExtensions.includes(lowerExt)) {
+                        const cb = document.querySelector(`input[value="${lowerExt}"]`);
+                        if (cb) cb.checked = true;
+                    } else {
+                        customExts.push(ext);
+                    }
+                });
+                document.getElementById('customExtensions').value = customExts.join(', ');
+
+                // Database
                 document.getElementById('dbEnabled').checked = data.database.enabled;
-                document.getElementById('dbDriver').value = data.database.driver;
+                const driver = data.database.driver === 'mysql' ? 'mysql' : 'sqlite3';
+                document.getElementById('dbDriver').value = driver;
                 document.getElementById('dbSource').value = data.database.source;
                 document.getElementById('dbTable').value = data.database.table;
                 toggleDisplay('dbEnabled', 'dbSettings');
+                updateDbHelp();
 
+                // Excel
                 document.getElementById('excelEnabled').checked = data.excel.enabled;
                 document.getElementById('excelOutput').value = data.excel.output;
                 toggleDisplay('excelEnabled', 'excelSettings');
 
+                // JSON
                 document.getElementById('jsonEnabled').checked = data.json ? data.json.enabled : false;
                 document.getElementById('jsonOutput').value = data.json ? data.json.output : 'scan_results.json';
                 toggleDisplay('jsonEnabled', 'jsonSettings');
@@ -126,45 +217,52 @@
         // Save Config
         document.getElementById('configForm').addEventListener('submit', (e) => {
             e.preventDefault();
-            const config = {
-                server: { port: parseInt(document.getElementById('serverPort').value) },
-                database: {
-                    enabled: document.getElementById('dbEnabled').checked,
-                    driver: document.getElementById('dbDriver').value,
-                    source: document.getElementById('dbSource').value,
-                    table: document.getElementById('dbTable').value
-                },
-                scan: {
-                    // Path defaults to whatever backend has, or we can leave it empty to not overwrite if we aren't showing it here.
-                    // Actually we need to be careful not to wipe it.
-                    // Best to fetch current or let backend handle merge? 
-                    // For simplicity, let's just send what we have. Backend merge logic isn't robust.
-                    // We should probably preserve it.
-                    path: "", // Backend should probably preserve if we don't send? 
-                    // Actually, let's fetch it first or store it.
-                    // The JS load kept it in memory? No.
-                    // Let's just assume we don't change path here. 
-                    // Wait, `handleUpdateConfig` replaces the whole struct.
-                    // I need to fetch current config first or fix backend to patch.
-                    // Let's just fetch current config again to be safe/lazy?
-                    // Or let's make `path` hidden field?
-                },
-                excel: {
-                    enabled: document.getElementById('excelEnabled').checked,
-                    output: document.getElementById('excelOutput').value
-                },
-                json: {
-                    enabled: document.getElementById('jsonEnabled').checked,
-                    output: document.getElementById('jsonOutput').value
-                }
-            };
 
-            // We need to preserve scan path.
+            // Collect Extensions
+            const selectedExts = [];
+            commonExtensions.forEach(ext => {
+                const cb = document.querySelector(`input[value="${ext}"]`);
+                if (cb && cb.checked) {
+                    selectedExts.push(ext);
+                }
+            });
+            const customExtVal = document.getElementById('customExtensions').value;
+            if (customExtVal) {
+                const customList = customExtVal.split(/[,，]/).map(s => s.trim().toLowerCase());
+                customList.forEach(s => {
+                    if (s && !selectedExts.includes(s)) {
+                        // Ensure starts with .
+                        if (!s.startsWith('.')) s = '.' + s;
+                        selectedExts.push(s);
+                    }
+                });
+            }
+
+            // We need to fetch current path to preserve it
             fetch('/api/config')
                 .then(res => res.json())
                 .then(current => {
-                    config.scan.path = current.scan.path;
-                    config.scan.extensions = current.scan.extensions; // preserve ext too
+                    const config = {
+                        server: { port: parseInt(document.getElementById('serverPort').value) },
+                        database: {
+                            enabled: document.getElementById('dbEnabled').checked,
+                            driver: document.getElementById('dbDriver').value,
+                            source: document.getElementById('dbSource').value,
+                            table: document.getElementById('dbTable').value
+                        },
+                        scan: {
+                            path: current.scan.path, // Preserve path
+                            extensions: selectedExts
+                        },
+                        excel: {
+                            enabled: document.getElementById('excelEnabled').checked,
+                            output: document.getElementById('excelOutput').value
+                        },
+                        json: {
+                            enabled: document.getElementById('jsonEnabled').checked,
+                            output: document.getElementById('jsonOutput').value
+                        }
+                    };
 
                     return fetch('/api/config', {
                         method: 'POST',
@@ -179,7 +277,6 @@
                 .catch(err => showMessage('保存配置出错: ' + err, true));
         });
     </script>
-
 </body>
 
 </html>

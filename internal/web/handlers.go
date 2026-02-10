@@ -37,6 +37,7 @@ func handleUpdateConfig(c *gin.Context) {
 		return
 	}
 
+	config.AppConfig.Server = newConfig.Server
 	config.AppConfig.Database = newConfig.Database
 	config.AppConfig.Scan = newConfig.Scan
 	config.AppConfig.Excel = newConfig.Excel
